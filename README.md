@@ -1,6 +1,16 @@
 # bucketflow
 
-Lightweight in-memory rate limiting utilities for Node.js and TypeScript.
+Rate limiting utilities for Node.js and TypeScript supporting Token Bucket, Fixed Window, Sliding Window, and Leaky Bucket algorithms.
+
+## Features
+
+- **Lightweight & Zero-Dependencies**: Pure TypeScript/JavaScript in-memory implementation.
+- **Multiple Algorithms**:
+  - `TokenBucket`: Classic token bucket refill algorithm.
+  - `FixedWindow`: Fixed window counter rate limiting.
+  - `SlidingWindow`: Dynamic rolling/sliding window rate limiting.
+  - `LeakyBucket`: Queue-based request smoothing and leak processing.
+- **Universal Framework Support**: Works seamlessly with Express, Fastify, NestJS, Next.js, Koa, or standard HTTP servers.
 
 ## Installation
 
@@ -8,71 +18,72 @@ Lightweight in-memory rate limiting utilities for Node.js and TypeScript.
 npm install bucketflow
 ```
 
-## Public exports
+## Public Exports
 
-`src/index.ts` currently exports these three classes:
+`src/index.ts` exports the following limiters:
 
 ```ts
 export { FixedWindow } from "./fixed-window";
 export { TokenBucket } from "./token-bucket";
 export { SlidingWindow } from "./sliding-window";
+export { LeakyBucket } from "./leaky-bucket";
 ```
 
-Each limiter stores its counters in memory and exposes a `checkLimit(key)`
-method. The `key` identifies the client, user, IP address, API key, or any
-other group that should have its own limit.
+---
 
-## Using the limiters
+## Using the Limiters
 
-### `TokenBucket`
+### 1. `TokenBucket`
+
+Refills tokens at a steady rate up to a max capacity.
 
 ```ts
 import { TokenBucket } from "bucketflow";
 
-const limiter = new TokenBucket(10, 1_000);
+const limiter = new TokenBucket(10, 1_000); // 10 tokens capacity, refills 1 token every 1000ms
 const result = limiter.checkLimit("user-123");
 
 console.log(result);
 // { allowed: true, message: "Too many requests", tokens: 9 }
 ```
 
-Constructor:
-
+**Constructor:**
 ```ts
-new TokenBucket(capacity, refillRate, message?)
+new TokenBucket(capacity: number, refillRate: number, message?: string)
 ```
+- `capacity`: Maximum number of tokens available in the bucket.
+- `refillRate`: Time interval in milliseconds between token refills.
+- `message`: *(Optional)* Custom message returned when a request is rate limited.
 
-- `capacity`: maximum number of tokens.
-- `refillRate`: milliseconds between token refills.
-- `message`: optional message returned when a request is rejected.
+---
 
-`checkLimit(key)` returns `{ allowed, message, tokens }`.
+### 2. `FixedWindow`
 
-### `FixedWindow`
+Tracks request counts within fixed time windows.
 
 ```ts
 import { FixedWindow } from "bucketflow";
 
-const limiter = new FixedWindow(100, 60_000, "Too many requests");
+const limiter = new FixedWindow(100, 60_000, "Too many requests"); // 100 reqs per 60s
 const result = limiter.checkLimit("user-123");
 
 console.log(result);
 // { allowed: true, reqRemaining: 99, message: "Too many requests" }
 ```
 
-Constructor:
-
+**Constructor:**
 ```ts
-new FixedWindow(maxNum, window, message?)
+new FixedWindow(maxNum: number, window: number, message?: string)
 ```
+- `maxNum`: Maximum allowed requests within the window.
+- `window`: Window duration in milliseconds.
+- `message`: *(Optional)* Custom message returned when a request is rate limited.
 
-- `maxNum`: maximum number of requests in the window.
-- `window`: window duration in milliseconds.
-- `message`: optional message returned when a request is rejected.
+---
 
-`checkLimit(key)` returns `{ allowed, reqRemaining, message }`.
+### 3. `SlidingWindow`
 
-### `SlidingWindow`
+Smooths out traffic spikes across overlapping sub-intervals.
 
 ```ts
 import { SlidingWindow } from "bucketflow";
@@ -84,32 +95,51 @@ console.log(result);
 // { allowed: true, counter: 1, message: "Too many requests" }
 ```
 
-Constructor:
+**Constructor:**
+```ts
+new SlidingWindow(window: number, refreshRate: number, maxRequests: number, message?: string)
+```
+- `window`: Full window duration in milliseconds.
+- `refreshRate`: Sub-window refresh interval in milliseconds.
+- `maxRequests`: Maximum requests allowed within the window.
+- `message`: *(Optional)* Custom message returned when a request is rate limited.
+
+---
+
+### 4. `LeakyBucket`
+
+Queue-based rate limiter that smooths request flow by processing items at a fixed leak rate.
 
 ```ts
-new SlidingWindow(window, refreshRate, maxRequests, message?)
+import { LeakyBucket } from "bucketflow";
+
+const bucket = new LeakyBucket(5, 1_000); // Queue capacity of 5 requests
+
+const added = bucket.addRequest({ id: 1, payload: "data" });
+if (added) {
+  console.log("Request queued successfully");
+} else {
+  console.log("Bucket full! Request rejected.");
+}
+
+// Process/leak one request from the queue
+bucket.leak();
 ```
 
-- `window`: window duration in milliseconds.
-- `refreshRate`: counter refresh interval in milliseconds.
-- `maxRequests`: maximum requests tracked by the limiter.
-- `message`: optional message returned when a request is rejected.
+**Constructor:**
+```ts
+new LeakyBucket(capacity: number, leakRate: number)
+```
+- `capacity`: Maximum number of requests the queue can hold.
+- `leakRate`: Time interval or rate indicator for processing requests.
 
-`checkLimit(key)` returns `{ allowed, counter, message }`.
+**Methods:**
+- `addRequest(req: any)`: Adds a request to the queue. Returns `true` if added, `false` if capacity is reached.
+- `leak()`: Removes (leaks) the oldest request from the queue.
 
-## Return values
+---
 
-Each limiter returns an object with an `allowed` boolean and a message. The
-additional field depends on the limiter:
-
-- `TokenBucket`: `tokens` is the number of tokens remaining.
-- `FixedWindow`: `reqRemaining` is the reported number of requests remaining.
-- `SlidingWindow`: `counter` is the current request counter.
-
-## Framework integrations
-
-Bucketflow does not depend on a web framework. You can call a limiter from
-middleware, hooks, guards, or any other request boundary.
+## Framework Integrations
 
 ### Express
 
@@ -133,18 +163,7 @@ app.use((req, res, next) => {
 });
 ```
 
-You can use `FixedWindow` or `SlidingWindow` in the same middleware by
-replacing the limiter construction:
-
-```ts
-const limiter = new FixedWindow(100, 60_000);
-// or
-const limiter = new SlidingWindow(60_000, 1_000, 100);
-```
-
 ### Fastify
-
-Fastify can use a limiter in a `preHandler` hook:
 
 ```ts
 import Fastify from "fastify";
@@ -163,12 +182,7 @@ app.addHook("preHandler", async (request, reply) => {
 });
 ```
 
-This works with Fastify because the package has no Express-specific or
-NestJS-specific dependencies; the limiter can be called from Fastify hooks.
-
 ### NestJS
-
-In NestJS, the limiter can be used from middleware:
 
 ```ts
 import { Injectable, NestMiddleware } from "@nestjs/common";
@@ -193,20 +207,7 @@ export class RateLimitMiddleware implements NestMiddleware {
 }
 ```
 
-Register the middleware in a module with `MiddlewareConsumer`, or adapt the
-same pattern into a NestJS guard when route-level control is preferred.
-
-The same middleware pattern works with `FixedWindow` and `SlidingWindow`:
-
-```ts
-private readonly limiter = new FixedWindow(100, 60_000);
-// or
-private readonly limiter = new SlidingWindow(60_000, 1_000, 100);
-```
-
-All limiters are in-memory and local to the running process. They do not share
-state across multiple Node.js processes or servers, and state is lost when the
-process restarts.
+> **Note**: All limiters run in-memory local to the Node.js process. State is not shared across multi-node clusters or process restarts.
 
 ## License
 

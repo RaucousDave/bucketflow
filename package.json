@@ -1,6 +1,6 @@
 {
   "name": "bucketflow",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Rate limiting for Node.js with token bucket, fixed window, and leaky bucket algorithms",
   "main": "dist/index.js",
   "keywords": [
