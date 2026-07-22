@@ -1,0 +1,36 @@
+{
+  "name": "bucketflow",
+  "version": "1.0.0",
+  "description": "Rate limiting for Node.js with token bucket, fixed window, and leaky bucket algorithms",
+  "main": "dist/index.js",
+  "keywords": [
+    "rate-limiting",
+    "token-bucket",
+    "fixed-window",
+    "leaky-bucket"
+  ],
+  "author": "Davies",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsup && tsc --emitDeclarationOnly",
+    "prepublishOnly": "npm run build"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "5.7.3"
+  }
+}
