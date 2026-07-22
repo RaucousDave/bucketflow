@@ -8,47 +8,94 @@ Lightweight in-memory rate limiting utilities for Node.js and TypeScript.
 npm install bucketflow
 ```
 
-## Usage
+## Public exports
 
-### Token bucket
+`src/index.ts` currently exports these three classes:
+
+```ts
+export { FixedWindow } from "./fixed-window";
+export { TokenBucket } from "./token-bucket";
+export { SlidingWindow } from "./sliding-window";
+```
+
+Each limiter stores its counters in memory and exposes a `checkLimit(key)`
+method. The `key` identifies the client, user, IP address, API key, or any
+other group that should have its own limit.
+
+## Using the limiters
+
+### `TokenBucket`
 
 ```ts
 import { TokenBucket } from "bucketflow";
 
-const limiter = new TokenBucket(10, 1000);
+const limiter = new TokenBucket(10, 1_000);
 const result = limiter.checkLimit("user-123");
 
-if (!result.allowed) {
-  console.log(result.message);
-}
+console.log(result);
+// { allowed: true, message: "Too many requests", tokens: 9 }
 ```
 
-The constructor accepts `capacity`, `refillRate` in milliseconds, and an
-optional rejection message.
+Constructor:
 
-### Fixed window
+```ts
+new TokenBucket(capacity, refillRate, message?)
+```
+
+- `capacity`: maximum number of tokens.
+- `refillRate`: milliseconds between token refills.
+- `message`: optional message returned when a request is rejected.
+
+`checkLimit(key)` returns `{ allowed, message, tokens }`.
+
+### `FixedWindow`
 
 ```ts
 import { FixedWindow } from "bucketflow";
 
-const limiter = new FixedWindow(100, 60_000);
+const limiter = new FixedWindow(100, 60_000, "Too many requests");
 const result = limiter.checkLimit("user-123");
+
+console.log(result);
+// { allowed: true, reqRemaining: 99, message: "Too many requests" }
 ```
 
-The constructor accepts the maximum number of requests, the window duration
-in milliseconds, and an optional rejection message.
+Constructor:
 
-### Sliding window
+```ts
+new FixedWindow(maxNum, window, message?)
+```
+
+- `maxNum`: maximum number of requests in the window.
+- `window`: window duration in milliseconds.
+- `message`: optional message returned when a request is rejected.
+
+`checkLimit(key)` returns `{ allowed, reqRemaining, message }`.
+
+### `SlidingWindow`
 
 ```ts
 import { SlidingWindow } from "bucketflow";
 
-const limiter = new SlidingWindow(60_000, 1_000, 100);
+const limiter = new SlidingWindow(60_000, 1_000, 100, "Too many requests");
 const result = limiter.checkLimit("user-123");
+
+console.log(result);
+// { allowed: true, counter: 1, message: "Too many requests" }
 ```
 
-The constructor accepts the window duration, refresh rate, maximum requests,
-and an optional rejection message. Durations and rates are in milliseconds.
+Constructor:
+
+```ts
+new SlidingWindow(window, refreshRate, maxRequests, message?)
+```
+
+- `window`: window duration in milliseconds.
+- `refreshRate`: counter refresh interval in milliseconds.
+- `maxRequests`: maximum requests tracked by the limiter.
+- `message`: optional message returned when a request is rejected.
+
+`checkLimit(key)` returns `{ allowed, counter, message }`.
 
 ## Return values
 
@@ -84,6 +131,15 @@ app.use((req, res, next) => {
 
   next();
 });
+```
+
+You can use `FixedWindow` or `SlidingWindow` in the same middleware by
+replacing the limiter construction:
+
+```ts
+const limiter = new FixedWindow(100, 60_000);
+// or
+const limiter = new SlidingWindow(60_000, 1_000, 100);
 ```
 
 ### Fastify
@@ -140,13 +196,13 @@ export class RateLimitMiddleware implements NestMiddleware {
 Register the middleware in a module with `MiddlewareConsumer`, or adapt the
 same pattern into a NestJS guard when route-level control is preferred.
 
-## API
+The same middleware pattern works with `FixedWindow` and `SlidingWindow`:
 
-The package currently exports these classes:
-
-- `TokenBucket`
-- `FixedWindow`
-- `SlidingWindow`
+```ts
+private readonly limiter = new FixedWindow(100, 60_000);
+// or
+private readonly limiter = new SlidingWindow(60_000, 1_000, 100);
+```
 
 All limiters are in-memory and local to the running process. They do not share
 state across multiple Node.js processes or servers, and state is lost when the
